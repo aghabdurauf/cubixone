@@ -1,0 +1,8 @@
+.env
+data/
+skills/*
+!skills/.gitkeep
+prototype/
+__pycache__/
+*.pyc
+.venv/

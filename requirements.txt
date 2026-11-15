@@ -1,0 +1,13 @@
+fastapi==0.163.0
+uvicorn[standard]==0.54.0
+SQLAlchemy==2.1.8
+python-multipart>=0.0.9
+itsdangerous>=2.2
+cryptography>=43
+anthropic==2.8.0
+openai==3.51.0
+# database drivers
+PyMySQL>=1.1
+psycopg[binary]==3.3.9
+pymssql==2.4.6
+oracledb==26.1.0

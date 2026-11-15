@@ -1,0 +1,38 @@
+# CubixOne. Start with ./install.sh (it writes .env), or: docker compose up -d
+# The built-in MySQL only starts when .env has COMPOSE_PROFILES=mysql.
+services:
+  app:
+    build: .
+    image: cubixone:latest
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "${PORT:-8080}:8080"
+    volumes:
+      - cubixone-data:/app/data          # uploaded reports, AI-built pages, drafts
+      - ./skills:/app/skills:ro          # skills for Developer mode ("use X skill from ...")
+    depends_on:
+      mysql:
+        condition: service_healthy
+        required: false
+
+  mysql:
+    image: mysql:8.4
+    profiles: ["mysql"]
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: cubixone
+      MYSQL_USER: cubix
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-}          # set by ./install.sh
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-}
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+
+volumes:
+  cubixone-data:
+  mysql-data:
