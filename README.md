@@ -73,6 +73,17 @@ the `cubixone-data` volume (uploaded and AI-built pages), and `.env`.
 Open the repository in a Codespace (*Code → Codespaces → Create*). Docker is
 already there. Run `./install.sh -y`, then open the forwarded port 8080.
 
+## License and trademarks
+
+CubixOne is released under the [MIT License](LICENSE), Copyright (c) 2026 Cubix Labs.
+
+"CubixOne" and "Cubix Labs" are names of Cubix Labs. The MIT License covers the
+code, not the names: you may use and modify the software, but please don't
+present a modified version as "CubixOne" or imply it comes from Cubix Labs.
+
+Commercial installation, support, hosting and customisation are available from
+Cubix Labs.
+
 ## Project layout
 
 ```
