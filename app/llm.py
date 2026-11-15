@@ -99,6 +99,20 @@ def _anthropic(cfg: dict, system: str, messages: list[dict], max_tokens: int) ->
     return text
 
 
+def _detail(e: Exception) -> str:
+    """The provider's own error message, whatever shape its error body has."""
+    body = getattr(e, "body", None)
+    if isinstance(body, dict):
+        msg = body.get("error", body)
+        if isinstance(msg, dict):
+            msg = msg.get("message") or msg.get("msg") or msg.get("detail")
+        if isinstance(msg, str) and msg.strip():
+            return msg.strip()[:300]
+    if isinstance(body, str) and body.strip():
+        return body.strip()[:300]
+    return str(getattr(e, "message", e))[:300]
+
+
 def _openai(cfg: dict, system: str, messages: list[dict], max_tokens: int) -> str:
     provider = cfg["provider"]
     preset = PROVIDERS.get(provider, PROVIDERS["compat"])
@@ -129,7 +143,10 @@ def _openai(cfg: dict, system: str, messages: list[dict], max_tokens: int) -> st
     except openai.RateLimitError as e:
         raise LLMError("The provider is rate-limiting this key. Try again shortly.") from e
     except openai.APIStatusError as e:
-        raise LLMError(f"API error {e.status_code}: {getattr(e, 'message', e)}") from e
+        detail = _detail(e)
+        if e.status_code in (400, 403) and "key" in detail.lower():
+            raise LLMError(f"The API key was rejected: {detail}") from e
+        raise LLMError(f"API error {e.status_code}: {detail}") from e
     except openai.APIConnectionError as e:
         raise LLMError(f"Could not reach {base or 'the provider'}.") from e
     return (r.choices[0].message.content or "") if r.choices else ""
