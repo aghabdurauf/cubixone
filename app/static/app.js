@@ -708,24 +708,35 @@ async function pageLLM() {
     </div>
   </div>`;
 }
+const presetUrl = (k) => { const u = (PROVIDERS[k] || {}).base_url || ''; return u === 'required' ? '' : u; };
 function modelModal(m) {
   MODEL = m ? { ...m, api_key: '' } : { id: null, provider: 'anthropic', name: '', model: 'claude-opus-5-5', base_url: '', api_key: '', api_version: '', key_hint: '' };
   drawModelModal();
 }
+function pickProvider(k) {
+  MODEL.provider = k; MODEL.model = PROVIDERS[k].models[0] || ''; MODEL.base_url = presetUrl(k); drawModelModal();
+}
 function drawModelModal() {
-  const p = PROVIDERS[MODEL.provider];
-  const needsBase = p.base_url !== undefined;
+  const p = PROVIDERS[MODEL.provider] || PROVIDERS.compat;
+  const groups = [
+    ['Hosted providers', Object.keys(PROVIDERS).filter((k) => !['ollama', 'lmstudio', 'compat'].includes(k))],
+    ['Self-hosted', ['ollama', 'lmstudio']],
+    ['Any other model', ['compat']],
+  ];
+  const azure = MODEL.provider === 'azure';
   modal(`<h2>${MODEL.id ? 'Edit model' : 'Connect a model'}</h2>
-    <div class="field"><label>Provider</label><select onchange="MODEL.provider=this.value;MODEL.model=(PROVIDERS[this.value].models[0]||'');MODEL.base_url='';drawModelModal()">
-      ${Object.entries(PROVIDERS).map(([k, x]) => `<option value="${k}" ${k === MODEL.provider ? 'selected' : ''}>${esc(x.label)}</option>`).join('')}</select></div>
+    <p class="small muted">Any model can be connected. Pick a provider to pre-fill its address, or choose <b>Custom</b> for any OpenAI-compatible API. Every field stays editable.</p>
+    <div class="field"><label>Provider</label><select onchange="pickProvider(this.value)">
+      ${groups.map(([g, ks]) => `<optgroup label="${g}">${ks.filter((k) => PROVIDERS[k]).map((k) => `<option value="${k}" ${k === MODEL.provider ? 'selected' : ''}>${esc(PROVIDERS[k].label)}</option>`).join('')}</optgroup>`).join('')}</select></div>
     <div class="field"><label>Display name</label><input value="${esc(MODEL.name)}" placeholder="${esc(p.label)}" oninput="MODEL.name=this.value"></div>
-    ${needsBase ? `<div class="field"><label>${MODEL.provider === 'azure' ? 'Azure endpoint' : 'Base URL'}</label><input value="${esc(MODEL.base_url)}" placeholder="${esc(p.base_url === 'required' ? 'https://…' : p.base_url)}" oninput="MODEL.base_url=this.value"></div>` : ''}
+    <div class="field"><label>${azure ? 'Azure endpoint' : 'Base URL'}${MODEL.provider === 'anthropic' ? ' (optional)' : ''}</label>
+      <input value="${esc(MODEL.base_url)}" placeholder="${esc(presetUrl(MODEL.provider) || (MODEL.provider === 'anthropic' ? 'Anthropic API (default)' : 'https://api.example.com/v1'))}" oninput="MODEL.base_url=this.value"></div>
     ${p.note ? `<p class="small muted">${esc(p.note)}</p>` : ''}
-    <div class="field"><label>${MODEL.provider === 'azure' ? 'Deployment name' : 'Model'}</label>
-      ${p.models.length ? `<select onchange="MODEL.model=this.value">${p.models.map((x) => `<option ${x === MODEL.model ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select>`
-        : `<input value="${esc(MODEL.model)}" placeholder="Model name exactly as the provider spells it" oninput="MODEL.model=this.value">`}</div>
-    ${MODEL.provider === 'azure' ? `<div class="field"><label>API version</label><input value="${esc(MODEL.api_version || '2024-10-21')}" oninput="MODEL.api_version=this.value"></div>` : ''}
-    ${p.key ? `<div class="field"><label>API key</label><input type="password" placeholder="${MODEL.key_hint ? 'Stored (' + esc(MODEL.key_hint) + '). Leave blank to keep it.' : 'Paste the key. It is stored encrypted.'}" oninput="MODEL.api_key=this.value"></div>` : '<p class="small muted">No API key is needed for a self-hosted model.</p>'}
+    <div class="field"><label>${azure ? 'Deployment name' : 'Model'}</label>
+      <input list="model-suggestions" value="${esc(MODEL.model)}" placeholder="Model name exactly as the provider lists it" oninput="MODEL.model=this.value">
+      <datalist id="model-suggestions">${p.models.map((x) => `<option value="${esc(x)}">`).join('')}</datalist></div>
+    ${azure ? `<div class="field"><label>API version</label><input value="${esc(MODEL.api_version || '2024-10-21')}" oninput="MODEL.api_version=this.value"></div>` : ''}
+    <div class="field"><label>API key${p.key ? '' : ' (optional)'}</label><input type="password" placeholder="${MODEL.key_hint ? 'Stored (' + esc(MODEL.key_hint) + '). Leave blank to keep it.' : p.key ? 'Paste the key. It is stored encrypted.' : 'Only if your endpoint needs one'}" oninput="MODEL.api_key=this.value"></div>
     <div id="modelTest"></div>
     <div class="row" style="justify-content:space-between;margin-top:14px">
       <div class="row"><button class="btn" onclick="testDraftModel(this)">⚡ Test</button>${MODEL.id ? `<button class="btn" style="color:var(--bad)" onclick="deleteModel(this)">Delete</button>` : ''}</div>

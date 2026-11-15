@@ -1,6 +1,14 @@
-"""AI models the customer connects with their own key: Anthropic Claude through
-the Anthropic SDK; OpenAI, Azure OpenAI, Gemini, Mistral, Ollama and any
-OpenAI-compatible endpoint through the OpenAI SDK. Keys never leave the server."""
+"""AI models the customer connects with their own key. Any model can be added:
+
+* kind "anthropic"  Anthropic Claude, or any Anthropic-compatible endpoint (custom base URL),
+                    through the Anthropic SDK.
+* kind "openai"     OpenAI and every OpenAI-compatible API (Grok, GLM, DeepSeek, Qwen, Kimi,
+                    Groq, OpenRouter, Ollama, LM Studio, vLLM ...), through the OpenAI SDK.
+* kind "azure"      Azure OpenAI deployments.
+
+The entries below are presets: they only pre-fill the base URL. The base URL,
+the model name and the key are always editable, so a provider that is not
+listed works through "Custom". Keys never leave the server."""
 from __future__ import annotations
 
 import time
@@ -8,18 +16,42 @@ import time
 import anthropic
 import openai
 
+# key: True = an API key is required; False = optional (self-hosted, keyless gateways).
 PROVIDERS: dict[str, dict] = {
-    "anthropic": {"label": "Anthropic Claude", "key": True,
-                  "models": ["claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5", "claude-fable-5-2"]},
-    "openai":    {"label": "OpenAI", "key": True, "models": []},
-    "azure":     {"label": "Azure OpenAI", "key": True, "models": [], "base_url": "required",
-                  "note": "Base URL = your Azure endpoint; Model = the deployment name."},
-    "gemini":    {"label": "Google Gemini", "key": True, "models": [],
-                  "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/"},
-    "mistral":   {"label": "Mistral", "key": True, "models": [], "base_url": "https://api.mistral.ai/v1"},
-    "ollama":    {"label": "Ollama (self-hosted)", "key": False, "models": [], "base_url": "http://ollama:11434/v1"},
-    "compat":    {"label": "OpenAI-compatible endpoint", "key": True, "models": [], "base_url": "required"},
+    "anthropic":  {"label": "Anthropic Claude", "kind": "anthropic", "key": True, "base_url": "",
+                   "models": ["claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5", "claude-fable-5-2"],
+                   "note": "Leave the base URL empty for Anthropic itself, or enter an Anthropic-compatible endpoint."},
+    "openai":     {"label": "OpenAI", "kind": "openai", "key": True, "base_url": "https://api.openai.com/v1"},
+    "azure":      {"label": "Azure OpenAI", "kind": "azure", "key": True, "base_url": "required",
+                   "note": "Base URL = your Azure endpoint; Model = the deployment name."},
+    "gemini":     {"label": "Google Gemini", "kind": "openai", "key": True,
+                   "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/"},
+    "xai":        {"label": "xAI Grok", "kind": "openai", "key": True, "base_url": "https://api.x.ai/v1"},
+    "zhipu":      {"label": "Zhipu GLM (BigModel, China)", "kind": "openai", "key": True,
+                   "base_url": "https://open.bigmodel.cn/api/paas/v4/"},
+    "zai":        {"label": "Z.ai GLM (international)", "kind": "openai", "key": True,
+                   "base_url": "https://api.z.ai/api/paas/v4/"},
+    "deepseek":   {"label": "DeepSeek", "kind": "openai", "key": True, "base_url": "https://api.deepseek.com"},
+    "qwen":       {"label": "Alibaba Qwen (DashScope)", "kind": "openai", "key": True,
+                   "base_url": "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"},
+    "moonshot":   {"label": "Moonshot Kimi", "kind": "openai", "key": True, "base_url": "https://api.moonshot.ai/v1"},
+    "mistral":    {"label": "Mistral", "kind": "openai", "key": True, "base_url": "https://api.mistral.ai/v1"},
+    "cohere":     {"label": "Cohere", "kind": "openai", "key": True, "base_url": "https://api.cohere.ai/compatibility/v1"},
+    "perplexity": {"label": "Perplexity", "kind": "openai", "key": True, "base_url": "https://api.perplexity.ai"},
+    "groq":       {"label": "Groq", "kind": "openai", "key": True, "base_url": "https://api.groq.com/openai/v1"},
+    "together":   {"label": "Together AI", "kind": "openai", "key": True, "base_url": "https://api.together.xyz/v1"},
+    "fireworks":  {"label": "Fireworks AI", "kind": "openai", "key": True,
+                   "base_url": "https://api.fireworks.ai/inference/v1"},
+    "openrouter": {"label": "OpenRouter (hundreds of models)", "kind": "openai", "key": True,
+                   "base_url": "https://openrouter.ai/api/v1"},
+    "ollama":     {"label": "Ollama (self-hosted)", "kind": "openai", "key": False, "base_url": "http://ollama:11434/v1"},
+    "lmstudio":   {"label": "LM Studio / vLLM (self-hosted)", "kind": "openai", "key": False,
+                   "base_url": "http://host.docker.internal:1234/v1"},
+    "compat":     {"label": "Custom: any OpenAI-compatible API", "kind": "openai", "key": False, "base_url": "required",
+                   "note": "For any provider not listed: enter its base URL (usually ending in /v1), model name and key."},
 }
+for _p in PROVIDERS.values():
+    _p.setdefault("models", [])
 # Claude models that accept the server-side refusal fallback.
 _FALLBACK_MODELS = {"claude-opus-5-5", "claude-sonnet-5-5", "claude-fable-5-2", "claude-fable-5-1", "claude-opus-5"}
 TIMEOUT = 600.0
@@ -69,18 +101,27 @@ def _anthropic(cfg: dict, system: str, messages: list[dict], max_tokens: int) ->
 
 def _openai(cfg: dict, system: str, messages: list[dict], max_tokens: int) -> str:
     provider = cfg["provider"]
-    base = cfg.get("base_url") or PROVIDERS[provider].get("base_url")
-    if base == "required":
+    preset = PROVIDERS.get(provider, PROVIDERS["compat"])
+    base = (cfg.get("base_url") or "").strip() or preset.get("base_url")
+    if not base or base == "required":
         raise LLMError("Enter the base URL / endpoint for this provider.")
     try:
-        if provider == "azure":
+        if preset["kind"] == "azure":
             client = openai.AzureOpenAI(api_key=cfg.get("api_key"), azure_endpoint=base,
                                         api_version=cfg.get("api_version") or "2024-10-21", timeout=TIMEOUT)
         else:
-            client = openai.OpenAI(api_key=cfg.get("api_key") or "not-needed", base_url=base or None, timeout=TIMEOUT)
-        limit = {"max_completion_tokens": max_tokens} if provider in ("openai", "azure") else {"max_tokens": max_tokens}
-        r = client.chat.completions.create(model=cfg["model"],
-                                           messages=[{"role": "system", "content": system}, *messages], **limit)
+            client = openai.OpenAI(api_key=cfg.get("api_key") or "not-needed", base_url=base, timeout=TIMEOUT)
+        msgs = [{"role": "system", "content": system}, *messages]
+        name = "max_completion_tokens" if provider in ("openai", "azure") else "max_tokens"
+        # Providers cap output differently; step down if one rejects the size.
+        sizes = [max_tokens] + [s for s in (8192, 4096) if s < max_tokens]
+        for i, limit in enumerate(sizes):
+            try:
+                r = client.chat.completions.create(model=cfg["model"], messages=msgs, **{name: limit})
+                break
+            except openai.BadRequestError as e:
+                if "token" not in str(e).lower() or i == len(sizes) - 1:
+                    raise
     except openai.AuthenticationError as e:
         raise LLMError("The API key was rejected.") from e
     except openai.NotFoundError as e:
@@ -97,13 +138,12 @@ def _openai(cfg: dict, system: str, messages: list[dict], max_tokens: int) -> st
 def chat(cfg: dict, system: str, messages: list[dict], max_tokens: int = 16000) -> str:
     if not cfg.get("model"):
         raise LLMError("No model name is set.")
-    if PROVIDERS.get(cfg.get("provider"), {}).get("key") and not cfg.get("api_key"):
+    preset = PROVIDERS.get(cfg.get("provider"), PROVIDERS["compat"])
+    if preset["key"] and not cfg.get("api_key"):
         raise LLMError("No API key is stored for this model.")
-    if cfg["provider"] == "anthropic":
+    if preset["kind"] == "anthropic":
         return _anthropic(cfg, system, messages, max_tokens)
-    if cfg["provider"] in PROVIDERS:
-        return _openai(cfg, system, messages, max_tokens)
-    raise LLMError(f"Unknown provider: {cfg['provider']}")
+    return _openai(cfg, system, messages, max_tokens)
 
 
 def test(cfg: dict) -> dict:
